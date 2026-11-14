@@ -1,0 +1,59 @@
+name: Publish existing Android APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-existing-apk.yml'
+  workflow_dispatch:
+concurrency:
+  group: publish-existing-apk
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      EXPECTED_SHA256: d46143d7a2398303313a17f2a7f7aecd238983ecfc8e8c55e5b2609e40929477
+    steps:
+      - name: Download and verify the existing APK without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            'https://kahe-attendance-download.vercel.app/downloads/KAHE-Attendance-1.0.4.apk' \
+            --output KAHE-Attendance-1.0.4.apk
+          printf '%s  %s\n' "$EXPECTED_SHA256" 'KAHE-Attendance-1.0.4.apk' > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Publish the verified APK as a release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RELEASE_NOTES.md <<'NOTES'
+          # KAHE Attendance 1.0.4
+          
+          Existing Android APK copied unchanged to the standalone app repository. No rebuild was performed.
+          
+          - Version: 1.0.4; Android version code: 5.
+          - Android 7.0+; ARM64.
+          - API: https://189.72.146.93/api/v1
+          - Signing identity: unchanged existing preview signing certificate.
+          - SHA-256: d46143d7a2398303313a17f2a7f7aecd238983ecfc8e8c55e5b2609e40929477
+          
+          This is the same APK previously distributed from the attendance download website. Backend security-review findings have not been changed by copying this app.
+          NOTES
+          if gh release view android-v1.0.4 >/dev/null 2>&1; then
+            gh release download android-v1.0.4 --pattern KAHE-Attendance-1.0.4.apk --dir existing-release
+            printf '%s  %s\n' "$EXPECTED_SHA256" 'existing-release/KAHE-Attendance-1.0.4.apk' | sha256sum --check -
+          else
+            gh release create android-v1.0.4 \
+              --target "$GITHUB_SHA" \
+              --title 'KAHE Attendance 1.0.4' \
+              --notes-file RELEASE_NOTES.md \
+              KAHE-Attendance-1.0.4.apk SHA256SUMS.txt
+          fi

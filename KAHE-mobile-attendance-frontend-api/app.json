@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "KAHE Attendance",
+    "slug": "kahe-mobile",
+    "version": "1.0.4",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F5F7F6",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow KAHE Attendance to scan classroom and student QR codes.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-sharing"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "edu.kahe.attendance",
+      "versionCode": 5
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
