@@ -47,7 +47,7 @@ export type ApiUser = { id: string; fullName: string; role: string };
 export type AuthSession = { token: string; user: ApiUser };
 export type StudentFlow = ServerDrivenFlowConfig;
 export type AttendanceDecision = { decision: "ACCEPT" | "CHALLENGE" | "REJECT"; decisionReason?: string };
-export type StudentQr = { dataUrl: string; expiresInSeconds: number; expiresAt: number; sessionId: string };
+export type StudentQr = { dataUrl: string; expiresInSeconds: number; expiresAt: number; timestamp?: number; sessionId: string };
 export type SessionContext = { sessionId: string | null; sessionActive: boolean; attendanceStatus: 'MARKED' | 'PENDING' | 'NOT_MARKED'; verifiedAt: string | null; locationReady: boolean; radiusMeters: number | null; outsideScheduledTime?: boolean };
 export function getSlotContext(token: string, slotId: string) {
   return request<SessionContext>(`/sessions/for-slot/${encodeURIComponent(slotId)}`, { headers: authHeaders(token) });
@@ -149,7 +149,7 @@ export function updateProfile(token: string, body: { fullName?: string; departme
 }
 
 export function getFacultyQrExport(token: string, sessionId: string, expiresInSeconds: number = 900) {
-  return request<{ dataUrl: string; expiresAt: number; expiresInSeconds: number; format: string }>(
+  return request<{ dataUrl: string; expiresAt: number; expiresInSeconds: number; timestamp?: number; format: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/qr-export?format=dataUrl&expiresInSeconds=${expiresInSeconds}`,
     { headers: authHeaders(token) }
   );

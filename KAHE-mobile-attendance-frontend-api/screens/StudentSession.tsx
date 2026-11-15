@@ -37,10 +37,10 @@ export function StudentSession({ auth, slot, onBack }: { auth: AuthSession; slot
       </View>
     </View>
     {error ? <ScrollView contentContainerStyle={styles.screenContent}><Text accessibilityRole="alert" style={styles.errorBannerText}>{error}</Text><Action onPress={() => setRevision(value => value + 1)}><Text style={styles.actionPrimaryText}>Retry connection</Text></Action></ScrollView>
-      : marked ? <ScrollView contentContainerStyle={styles.scanOutcomeContent}><Text style={styles.resultTitle}>Attendance marked</Text><Text style={styles.resultMessage}>You are marked present for this session.</Text><Action onPress={onBack}><Text style={styles.actionPrimaryText}>Done</Text></Action></ScrollView>
+      : marked && tab === 'scan' ? <ScrollView contentContainerStyle={styles.scanOutcomeContent}><Text style={styles.resultTitle}>Attendance marked</Text><Text style={styles.resultMessage}>You are marked present for this session.</Text><Action onPress={onBack}><Text style={styles.actionPrimaryText}>Done</Text></Action></ScrollView>
       : context?.sessionId && (context.sessionActive || tab === 'pass') ? tab === 'scan'
         ? <UniversalScanner key={context.sessionId} auth={auth} role="student" onBack={onBack} expectedSessionId={context.sessionId} embedded onResult={() => setRevision(value => value + 1)} />
         : <ScrollView contentContainerStyle={styles.screenContent}><StudentQrPass auth={auth} sessionId={context.sessionId} /></ScrollView>
-      : <ScrollView contentContainerStyle={styles.screenContent}><Text style={styles.screenLead}>{context ? 'Scanning is available during this session’s scheduled time or when a teacher opens its QR. Select My QR to show your pass for today’s session.' : 'Checking session...'}</Text><Action kind="secondary" onPress={() => setRevision(value => value + 1)}><Text style={styles.actionSecondaryText}>Check again</Text></Action></ScrollView>}
+      : <ScrollView contentContainerStyle={styles.screenContent}><Text style={styles.screenLead}>{!context ? 'Checking session...' : tab === 'pass' ? 'Your QR pass is available for today’s classes only. Choose today’s session from your timetable. If this is today’s class, tap Check again or ask your teacher to check its schedule.' : 'Scanning is available during this session’s scheduled time or when a teacher opens its QR. Select My QR to show your pass for today’s session.'}</Text><Action kind="secondary" onPress={() => setRevision(value => value + 1)}><Text style={styles.actionSecondaryText}>Check again</Text></Action></ScrollView>}
   </View>;
 }

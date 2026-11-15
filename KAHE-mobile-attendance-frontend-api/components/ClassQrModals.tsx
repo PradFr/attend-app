@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { AttendanceApiError, getFacultyQrExport, getSessionRecords, launchSlotSession, type AuthSession, type MobileTimetableSlot } from '../lib/api';
+import { AttendanceApiError, getSessionRecords, launchSlotSession, type AuthSession, type MobileTimetableSlot } from '../lib/api';
 import { colors, formatAmPm, getErrorMessage } from '../theme';
 import { styles } from '../styles';
 import { BigScreenPairing } from './BigScreenPairing';
 import { UniversalScanner } from '../screens/UniversalScanner';
 import { Action, ConfirmModal, ModalViewport } from './ui';
+import { useQrDisplay } from '../lib/use-qr-display';
 import { sessionName } from './SessionCard';
 
 export function FacultyClassQrModal({ auth, slot, visible, onClose }: { auth: AuthSession; slot: MobileTimetableSlot; visible: boolean; onClose: () => void }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [qr, setQr] = useState<{ dataUrl: string; expiresAt: number } | null>(null);
+  const { qr, loading: qrLoading, error: qrError, refresh: refreshQr, onImageError } = useQrDisplay(auth.token, sessionId, 'faculty', visible);
   const [tab, setTab] = useState<'qr' | 'scan'>('qr');
   const [error, setError] = useState('');
   const [warning, setWarning] = useState(false);
@@ -18,7 +19,7 @@ export function FacultyClassQrModal({ auth, slot, visible, onClose }: { auth: Au
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [pairing, setPairing] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [recordsError, setRecordsError] = useState('');
   const [recordCount, setRecordCount] = useState<number | null>(null);
   useEffect(() => {
     if (!visible) return;
@@ -36,31 +37,21 @@ export function FacultyClassQrModal({ auth, slot, visible, onClose }: { auth: Au
 
   useEffect(() => {
     if (!sessionId || !visible) return;
-    let active = true, busy = false;
-    const refresh = async () => {
-      if (busy) return; busy = true;
-      try {
-        const next = await getFacultyQrExport(auth.token, sessionId, 60);
-        if (active) { setQr({ dataUrl: next.dataUrl, expiresAt: next.expiresAt * 1000 }); setError(''); }
-      } catch (err) { if (active) { setQr(null); setError(getErrorMessage(err)); } }
-      finally { busy = false; }
-    };
+    let active = true;
     const records = async () => {
       try {
         const next = await getSessionRecords(auth.token, sessionId);
-        if (active) setRecordCount(next.records.filter(row => ['PRESENT', 'LATE', 'EXCUSED'].includes(row.status)).length);
-      } catch (err) { if (active) setError(getErrorMessage(err)); }
+        if (active) { setRecordCount(next.records.filter(row => ['PRESENT', 'LATE', 'EXCUSED'].includes(row.status)).length); setRecordsError(''); }
+      } catch (err) { if (active) setRecordsError(getErrorMessage(err)); }
     };
-    void refresh(); void records();
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 45000);
+    void records();
     const poll = setInterval(() => { if (AppState.currentState === 'active') void records(); }, 5000);
-    const clock = setInterval(() => setNow(Date.now()), 1000);
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') { void refresh(); void records(); } });
-    return () => { active = false; clearInterval(timer); clearInterval(poll); clearInterval(clock); subscription.remove(); };
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') { void records(); } });
+    return () => { active = false; clearInterval(poll); subscription.remove(); };
   }, [auth.token, sessionId, visible, revision]);
   if (!visible) return null;
   if (pairing && sessionId) return <BigScreenPairing auth={auth} sessionId={sessionId} onClose={() => setPairing(false)} />;
-  const valid = qr && qr.expiresAt > now;
+  const valid = Boolean(qr);
   return <ModalViewport onClose={onClose}><View style={[styles.passModalCard, { width: '100%' }]}>
     <Text style={styles.passModalTitle}>{sessionName(slot)}</Text>
     <Text style={styles.passTimeText}>{formatAmPm(slot.startTime)} - {formatAmPm(slot.endTime)}</Text>
@@ -72,7 +63,10 @@ export function FacultyClassQrModal({ auth, slot, visible, onClose }: { auth: Au
       ? <ScrollView style={{ width: '100%', maxHeight: 520 }}><UniversalScanner auth={auth} role="faculty" expectedSessionId={sessionId} embedded onBack={onClose} /></ScrollView>
       : sessionId ? <>
         <Text style={styles.passInstructions}>Students scan this code to mark their attendance.</Text>
-        {valid ? <Image accessibilityLabel="Classroom attendance QR" source={{ uri: qr.dataUrl }} style={styles.responsiveQrImage} resizeMode="contain" onError={() => { setQr(null); setError('QR image could not load. Tap Retry.'); }} /> : <View style={styles.qrLoadingBox}><Text style={styles.loadingText}>{error ? 'QR unavailable' : 'Loading QR...'}</Text></View>}
+        {qr ? <Image accessibilityLabel="Classroom attendance QR" source={{ uri: qr.dataUrl }} style={styles.responsiveQrImage} resizeMode="contain" onError={onImageError} /> : <View style={styles.qrLoadingBox}><Text style={styles.loadingText}>{qrError ? 'QR unavailable' : 'Loading QR...'}</Text></View>}
+        {!!qrError && <Text accessibilityRole="alert" style={styles.errorBannerText}>{qrError}</Text>}
+        <Action kind="secondary" disabled={qrLoading} onPress={refreshQr}><Text style={styles.actionSecondaryText}>{qrLoading ? 'Refreshing QR...' : qrError ? 'Retry QR' : 'Refresh QR'}</Text></Action>
+        {!!recordsError && <Text accessibilityRole="alert" style={styles.errorBannerText}>Attendance count could not refresh. It will retry automatically.</Text>}
         {recordCount !== null && <Text accessibilityLiveRegion="polite" style={styles.passInstructions}>{recordCount} student{recordCount === 1 ? '' : 's'} marked present</Text>}
         <Action kind="secondary" disabled={!valid} onPress={() => setPairing(true)}><Text style={styles.actionSecondaryText}>Show on big screen</Text></Action>
       </> : null}
