@@ -30,6 +30,8 @@ jobs:
         working-directory: KAHE-mobile-attendance-frontend-api
         run: npm ci --include=dev
       - name: Check mobile source
+        env:
+          NODE_ENV: test
         working-directory: KAHE-mobile-attendance-frontend-api
         run: |
           npm test
