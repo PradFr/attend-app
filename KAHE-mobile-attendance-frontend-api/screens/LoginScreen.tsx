@@ -1,8 +1,8 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { StatusBar } from "expo-status-bar";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { login, type AuthSession } from "../lib/api";
 import { colors, iconName, getErrorMessage } from "../theme";
 import { styles } from "../styles";
@@ -10,6 +10,16 @@ import { Action } from "../components/ui";
 
 
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: (auth: AuthSession) => void }) {
+  const scroll = useRef<ScrollView>(null);
+  const passwordInput = useRef<TextInput>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const revealForm = () => { if (keyboardVisible) scroll.current?.scrollToEnd({ animated: true }); };
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [roleType, setRoleType] = useState<"student" | "faculty">("student");
@@ -37,11 +47,11 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (auth: AuthS
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="none" contentContainerStyle={styles.loginContainer} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView ref={scroll} onContentSizeChange={revealForm} onLayout={revealForm} keyboardShouldPersistTaps="handled" keyboardDismissMode="none" contentContainerStyle={styles.loginContainer} showsVerticalScrollIndicator={false}>
         {/* University Crest Header */}
-        <View style={styles.loginHeader}>
-          <Image source={require("../assets/university-logo.png")} style={styles.universityLogo} resizeMode="contain" accessibilityLabel="Karpagam Academy of Higher Education logo" />
+        <View style={[styles.loginHeader, keyboardVisible && { marginBottom: 16 }]}>
+          {!keyboardVisible && <Image source={require("../assets/university-logo.png")} style={styles.universityLogo} resizeMode="contain" accessibilityLabel="Karpagam Academy of Higher Education logo" />}
           <Text style={styles.universityKicker}>KARPAGAM ACADEMY OF HIGHER EDUCATION</Text>
           <Text style={styles.loginMainTitle}>Campus attendance</Text>
           <Text style={styles.loginSubtitle}>
@@ -86,6 +96,10 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (auth: AuthS
           <View style={styles.inputContainer}>
             <MaterialCommunityIcons name={iconName("email-outline")} size={18} color={colors.textSubtle} />
             <TextInput
+              onFocus={revealForm}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordInput.current?.focus()}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -103,15 +117,24 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (auth: AuthS
           <View style={styles.inputContainer}>
             <MaterialCommunityIcons name={iconName("lock-outline")} size={18} color={colors.textSubtle} />
             <TextInput
+              ref={passwordInput}
+              onFocus={revealForm}
+              returnKeyType="done"
+              onSubmitEditing={() => { if (!loading) void handleLogin(); }}
+              autoCapitalize="none"
+              autoCorrect={false}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               accessibilityLabel="Password"
               autoComplete="current-password"
               placeholder="Enter password"
               placeholderTextColor={colors.textSubtle}
               style={styles.textInput}
             />
+            <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide password' : 'Show password'} accessibilityState={{ checked: showPassword }} onPress={() => setShowPassword(value => !value)} style={styles.passwordVisibilityButton}>
+              <MaterialCommunityIcons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.primary} />
+            </Pressable>
           </View>
 
           {error ? (

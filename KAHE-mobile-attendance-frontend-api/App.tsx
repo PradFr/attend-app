@@ -1,3 +1,4 @@
+import { useHardwareBack } from './lib/use-hardware-back';
 import { readAuth, saveAuth } from './lib/auth-storage';
 import { useState, useEffect } from "react";
 import { Text, View } from "react-native";
@@ -29,6 +30,14 @@ function AttendanceApp() {
   // Active Class-Specific QR Modals State
   const [studentQrSlot, setStudentQrSlot] = useState<MobileTimetableSlot | null>(null);
   const [facultyQrSlot, setFacultyQrSlot] = useState<MobileTimetableSlot | null>(null);
+
+  useHardwareBack(() => {
+    if (studentQrSlot) { setStudentQrSlot(null); return true; }
+    if (facultyQrSlot) { setFacultyQrSlot(null); return true; }
+    // Timetable handles its batch detail before returning home.
+    if (screen !== 'home' && screen !== 'timetable') { setScreen('home'); return true; }
+    return false;
+  });
 
   if (!connectionReady) return <View style={styles.permissionScreen}><Text style={styles.loadingText}>Opening attendance...</Text></View>;
   if (!auth) return <LoginScreen onAuthenticated={session => { void saveAuth(session).then(() => setAuth(session)).catch(() => alert('Could not save sign-in. Please try again.')); }} />;

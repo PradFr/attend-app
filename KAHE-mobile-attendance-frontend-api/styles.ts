@@ -376,6 +376,12 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border
   },
+  batchTimetableCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, marginBottom: 12, borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  batchSessionCount: { fontSize: 13, color: colors.textMuted },
+  passwordVisibilityButton: { minWidth: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  scanResultOverlay: { position: 'absolute', left: 12, right: 12, bottom: 12, borderRadius: 14, padding: 14, backgroundColor: colors.card, borderWidth: 2, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  scanResultTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  scanResultMessage: { fontSize: 13, lineHeight: 19, color: colors.textMuted, marginTop: 4 },
   textInput: { flex: 1, height: 50, fontSize: 16, color: colors.text, minWidth: 0 },
   textInputSimple: {
     height: 50,

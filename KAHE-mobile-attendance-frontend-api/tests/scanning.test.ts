@@ -35,3 +35,16 @@ describe('native QR decoding and persistent result data', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('continuous faculty scanning', () => {
+  it('blocks a QR held in view while accepting the next student immediately', async () => {
+    const { createScanDeduplicator } = await import('../lib/scanning');
+    const accept = createScanDeduplicator();
+    expect(accept('student-a', 0)).toBe(true);
+    expect(accept('student-a', 100)).toBe(false);
+    expect(accept('student-a', 1900)).toBe(false);
+    expect(accept('student-b', 1950)).toBe(true);
+    expect(accept('student-a', 2000)).toBe(false);
+    expect(accept('student-a', 4000)).toBe(true);
+  });
+});

@@ -41,3 +41,14 @@ export function attendanceOutcome(result: { decision: 'ACCEPT' | 'CHALLENGE' | '
     : reason || 'This attempt did not meet the attendance requirements.';
   return { kind: 'rejected', title: 'Attendance not recorded', message, badge: 'NOT RECORDED' };
 }
+
+/** Suppress a code held in view until it has left the camera for a short interval. */
+export function createScanDeduplicator(quietMilliseconds = 2000) {
+  const lastSeen = new Map<string, number>();
+  return (data: string, now = Date.now()) => {
+    const previous = lastSeen.get(data);
+    for (const [key, time] of lastSeen) if (now - time >= quietMilliseconds) lastSeen.delete(key);
+    lastSeen.set(data, now);
+    return previous === undefined || now - previous >= quietMilliseconds;
+  };
+}

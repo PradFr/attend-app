@@ -3,7 +3,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Vibration, View } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { AttendanceApiError, getStudentFlow, submitAttendanceAttempt, submitProfessorScan, type AuthSession } from '../lib/api';
-import { attendanceOutcome, decodeAttendanceQr, withTimeout, type ScanOutcome } from '../lib/scanning';
+import { attendanceOutcome, decodeAttendanceQr, createScanDeduplicator, type ScanOutcome } from '../lib/scanning';
 import type { Role } from '../lib/navigation';
 import { colors, getErrorMessage } from '../theme';
 import { styles } from '../styles';
@@ -21,14 +21,24 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
   const [cameraKey, setCameraKey] = useState(0);
   const [torch, setTorch] = useState(false);
   const locked = useRef(false);
+  const acceptScan = useRef(createScanDeduplicator());
   const mounted = useRef(true);
   const faculty = role === 'faculty';
   const [pendingScan, setPendingScan] = useState<string | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
+  useEffect(() => {
+    if (!faculty || !outcome) return;
+    const timer = setTimeout(() => setOutcome(null), 3000);
+    return () => clearTimeout(timer);
+  }, [faculty, outcome]);
+
   const scan = async ({ data }: { data: string }, confirmOutsideSchedule = false) => {
     if ((!confirmOutsideSchedule && locked.current) || (!faculty && !confirmed)) return;
+    if (!confirmOutsideSchedule && faculty && !acceptScan.current(data)) return;
     locked.current = true;
+    let awaitingConfirmation = false;
+    setOutcome(null);
     Vibration.vibrate(60);
     setBusy(true);
     setPhase('QR detected. Checking the class...');
@@ -40,7 +50,7 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
         setPhase('QR detected. Recording student attendance...');
         const result = await submitProfessorScan(auth.token, qr.sessionId, data, confirmOutsideSchedule);
         if (result.decision !== 'ACCEPT') throw new Error(result.decisionReason || 'Attendance was not recorded.');
-        if (mounted.current) setOutcome({ kind: 'success', title: 'Student marked present', message: result.studentName + (result.enrollmentId ? ' ? ' + result.enrollmentId : '') + '. Attendance is saved.', badge: 'PRESENT' });
+        if (mounted.current) setOutcome({ kind: 'success', title: 'Student marked present', message: result.studentName + (result.enrollmentId ? ' · ' + result.enrollmentId : '') + '. Attendance is saved.', badge: 'PRESENT' });
       } else {
         if (qr.type !== 'SESSION_BROADCAST') throw new Error('This is a student pass. Scan the QR shown on the classroom screen.');
         const flow = await getStudentFlow(auth.token, qr.sessionId);
@@ -48,20 +58,22 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
         setPhase('QR detected. Saving your attendance...');
         const result = await submitAttendanceAttempt(auth.token, { sessionId: qr.sessionId, clientTimestamp: new Date().toISOString(), qrPayload: data, declarationAccepted: confirmed });
         if (mounted.current) setOutcome(attendanceOutcome(result));
-        onResult?.();
+        if (mounted.current) onResult?.();
       }
     } catch (error) {
-      if (error instanceof AttendanceApiError && error.code === 'OUTSIDE_SCHEDULE') { setPendingScan(data); return; }
+      if (!mounted.current) return;
+      if (error instanceof AttendanceApiError && error.code === 'OUTSIDE_SCHEDULE') { awaitingConfirmation = true; setPendingScan(data); return; }
       if (mounted.current) setOutcome({ kind: 'error', title: 'Attendance not confirmed', message: getErrorMessage(error), badge: 'NOT CONFIRMED' });
     } finally {
-      // Stay locked until the person explicitly chooses Scan again or Done.
+      // Faculty can scan the next pass immediately; students keep their result.
+      if (faculty && !awaitingConfirmation) locked.current = false;
       if (mounted.current) setBusy(false);
     }
   };
 
   const retry = () => { locked.current = false; setOutcome(null); setPhase(''); setBusy(false); setCameraError(''); setCameraKey(value => value + 1); };
 
-  if (outcome) {
+  if (outcome && !faculty) {
     const success = outcome.kind === 'success';
     const review = outcome.kind === 'review';
     const tone = success ? colors.primary : review ? colors.amber : colors.danger;
@@ -87,9 +99,10 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
     <Action onPress={() => { if (permission?.canAskAgain === false) void Linking.openSettings(); else void requestPermission(); }}><Text style={styles.actionPrimaryText}>{permission?.canAskAgain === false ? 'Open phone settings' : 'Allow camera'}</Text></Action>
   </ScrollView>;
 
+  const tone = outcome?.kind === 'success' ? colors.primary : colors.danger;
   return <ScrollView style={styles.screen} contentContainerStyle={styles.scannerContent} keyboardShouldPersistTaps="handled">
     <ConfirmModal visible={pendingScan !== null} title="Outside scheduled time" message="This session has not started yet or has already ended. Mark this student anyway?" confirmText="Continue and mark" onConfirm={() => { const data = pendingScan!; setPendingScan(null); void scan({ data }, true); }} onCancel={() => { setPendingScan(null); retry(); }} />
-    {!embedded && <Back onPress={onBack} disabled={busy} />}
+    {!embedded && <Back onPress={onBack} />}
     {!embedded && <Text style={styles.screenTitle}>{faculty ? 'Scan student pass' : 'Scan classroom QR'}</Text>}
     <Text style={styles.screenLead}>Keep the code inside the fixed square. The frame stays still.</Text>
     <View style={styles.fixedCameraBox}>
@@ -99,6 +112,13 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
       <View pointerEvents="none" style={styles.fixedCameraGuide}>
         <View style={[styles.cornerBracket, styles.cornerTopLeft]} /><View style={[styles.cornerBracket, styles.cornerTopRight]} /><View style={[styles.cornerBracket, styles.cornerBottomLeft]} /><View style={[styles.cornerBracket, styles.cornerBottomRight]} />
       </View>
+      {faculty && outcome && <View pointerEvents="none" style={[styles.scanResultOverlay, { borderColor: tone }]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+        <MaterialCommunityIcons name={outcome.kind === 'success' ? 'check-circle' : 'alert-circle-outline'} size={28} color={tone} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.scanResultTitle, { color: tone }]}>{outcome.title}</Text>
+          <Text style={styles.scanResultMessage}>{outcome.message}</Text>
+        </View>
+      </View>}
     </View>
     {!faculty && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: confirmed, disabled: busy }} disabled={busy} onPress={() => setConfirmed(value => !value)} style={styles.presenceCheckbox}>
       <MaterialCommunityIcons name={confirmed ? 'checkbox-marked' : 'checkbox-blank-outline'} size={26} color={colors.primary} />
@@ -106,7 +126,7 @@ export function UniversalScanner({ auth, role, onBack, expectedSessionId, embedd
     </Pressable>}
     <View style={styles.scanStatusCard} accessibilityLiveRegion="polite">
       {busy ? <ActivityIndicator color={colors.primary} /> : <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.primary} />}
-      <Text style={styles.scanStatusText}>{cameraError || (busy ? phase : !faculty && !confirmed ? 'Confirm your presence above to enable scanning.' : 'Ready to scan. Detection will vibrate and show a result.')}</Text>
+      <Text style={styles.scanStatusText}>{cameraError || (busy ? phase : !faculty && !confirmed ? 'Confirm your presence above to enable scanning.' : faculty ? 'Ready for the next student. Results appear over the camera.' : 'Ready to scan. Detection will vibrate and show a result.')}</Text>
     </View>
     {cameraError ? <Action onPress={retry}><Text style={styles.actionPrimaryText}>Restart camera</Text></Action> : <Action kind="secondary" disabled={busy} onPress={() => setTorch(value => !value)}><Text style={styles.actionSecondaryText}>{torch ? 'Turn flashlight off' : 'Turn flashlight on'}</Text></Action>}
   </ScrollView>;
