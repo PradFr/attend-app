@@ -1,0 +1,47 @@
+name: Record production deployment
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Full commit SHA successfully deployed by Vercel
+        required: true
+        type: string
+      vercel_deployment_id:
+        description: Successful Vercel production deployment ID
+        required: true
+        type: string
+permissions:
+  contents: read
+  deployments: write
+concurrency:
+  group: record-attendance-production
+  cancel-in-progress: false
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DEPLOYED_SHA: ${{ inputs.commit_sha }}
+      VERCEL_DEPLOYMENT_ID: ${{ inputs.vercel_deployment_id }}
+    steps:
+      - name: Verify successful Vercel commit status
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$VERCEL_DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]+$ ]]
+          gh api "repos/$GH_REPO/commits/$DEPLOYED_SHA/status" > status.json
+          DEPLOYMENT_LOG_URL="https://vercel.com/pradeepkumarforreal-9733s-projects/attendance/${VERCEL_DEPLOYMENT_ID#dpl_}"
+          jq -e --arg url "$DEPLOYMENT_LOG_URL" '.statuses | any(.context == "Vercel" and .state == "success" and .target_url == $url)' status.json
+          curl --fail --silent --show-error --location --max-time 30 https://kahe-attendance.vercel.app/ --output /dev/null
+          echo "DEPLOYMENT_LOG_URL=$DEPLOYMENT_LOG_URL" >> "$GITHUB_ENV"
+      - name: Record production environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg ref "$DEPLOYED_SHA" '{ref:$ref,auto_merge:false,required_contexts:[],environment:"Production",production_environment:true,description:"Verified successful Vercel production deployment of KAHE Attendance."}' > deployment.json
+          deployment_id="$(gh api "repos/$GH_REPO/deployments" --method POST --input deployment.json --jq .id)"
+          jq -n --arg log "$DEPLOYMENT_LOG_URL" '{state:"success",environment:"Production",environment_url:"https://kahe-attendance.vercel.app",log_url:$log,auto_inactive:true,description:"Live on Vercel; build and site checks passed."}' > deployment-status.json
+          gh api "repos/$GH_REPO/deployments/$deployment_id/statuses" --method POST --input deployment-status.json
