@@ -8,10 +8,6 @@ const result = spawnSync(process.execPath, [
 ], {
   cwd: projectRoot,
   stdio: 'inherit',
-  env: {
-    ...process.env,
-    EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || 'https://189.72.146.93/api/v1',
-  },
 });
 
 if (result.error) console.error(result.error.message);

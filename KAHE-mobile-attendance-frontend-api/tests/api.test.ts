@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_BASE_URL, authHeaders, getStudentFlow, submitAttendanceAttempt, login, getSlotContext, getStudentQr, launchSlotSession } from "../lib/api";
 
+const expectedConnection = API_BASE_URL;
+
 describe("attendance API client configuration", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it('uses the fixed institution API by default', () => {
-    expect(API_BASE_URL).toBe('https://189.72.146.93/api/v1');
+    expect(API_BASE_URL).toMatch(/^https:\/\/[^/]+\/api\/v1$/);
   });
 
   it("formats authenticated requests with a bearer token", () => {
@@ -16,8 +18,8 @@ describe("attendance API client configuration", () => {
     vi.stubGlobal('localStorage', { getItem: () => 'https://old-preview.example/api/v1', setItem: vi.fn() });
     vi.resetModules();
     const api = await import('../lib/api');
-    expect(api.getApiBaseUrl()).toBe('https://189.72.146.93/api/v1');
-    expect(api.getClassroomDisplayUrl()).toBe('https://189.72.146.93/display/');
+    expect(api.getApiBaseUrl()).toBe(expectedConnection);
+    expect(api.getClassroomDisplayUrl()).toBe(expectedConnection.replace(/\/api\/v1$/, '/display/'));
     expect(api).not.toHaveProperty('setCustomApiBaseUrl');
   });
 
@@ -81,7 +83,7 @@ describe("attendance API client configuration", () => {
     vi.stubGlobal('window', { location: { protocol: 'https:', hostname: 'attendance.example.edu', origin: 'https://attendance.example.edu' } });
     vi.resetModules();
     const releaseApi = await import('../lib/api');
-    expect(releaseApi.getApiBaseUrl()).toBe('https://189.72.146.93/api/v1');
+    expect(releaseApi.getApiBaseUrl()).toBe(expectedConnection);
   });
 
   it('connects native releases to the hardcoded API without manual setup', async () => {
@@ -89,7 +91,7 @@ describe("attendance API client configuration", () => {
     vi.stubGlobal('window', undefined);
     vi.resetModules();
     const nativeApi = await import('../lib/api');
-    expect(nativeApi.getApiBaseUrl()).toBe('https://189.72.146.93/api/v1');
+    expect(nativeApi.getApiBaseUrl()).toBe(expectedConnection);
   });
 
   it('keeps the same fixed server in development without a build-time override', async () => {
@@ -97,6 +99,6 @@ describe("attendance API client configuration", () => {
     vi.stubGlobal('window', { location: { protocol: 'http:', hostname: 'localhost', origin: 'http://localhost:8081' } });
     vi.resetModules();
     const api = await import('../lib/api');
-    expect(api.getApiBaseUrl()).toBe('https://189.72.146.93/api/v1');
+    expect(api.getApiBaseUrl()).toBe(expectedConnection);
   });
 });

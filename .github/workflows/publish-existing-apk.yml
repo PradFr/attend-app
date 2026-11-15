@@ -41,11 +41,10 @@ jobs:
           
           - Version: 1.0.4; Android version code: 5.
           - Android 7.0+; ARM64.
-          - API: https://189.72.146.93/api/v1
           - Signing identity: unchanged existing preview signing certificate.
           - SHA-256: d46143d7a2398303313a17f2a7f7aecd238983ecfc8e8c55e5b2609e40929477
           
-          This is the same APK previously distributed from the attendance download website. Backend security-review findings have not been changed by copying this app.
+          This is the same APK previously distributed from the attendance download website.
           NOTES
           if gh release view android-v1.0.4 >/dev/null 2>&1; then
             gh release download android-v1.0.4 --pattern KAHE-Attendance-1.0.4.apk --dir existing-release
