@@ -1,0 +1,54 @@
+name: Publish Android release
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Android APK workflow run
+        required: true
+        type: string
+      version:
+        description: App version to publish
+        required: true
+        default: '1.0.5'
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-android-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      APP_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Verify build and release draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build.json
+          jq -e '.conclusion == "success" and .head_branch == "main" and .path == ".github/workflows/android-preview.yml"' build.json
+          gh release view "android-v$APP_VERSION" --json isDraft,targetCommitish > release.json
+          jq -e '.isDraft == true' release.json
+          test "$(jq -r .head_sha build.json)" = "$(jq -r .targetCommitish release.json)"
+      - name: Download verified APK and check checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$BUILD_RUN_ID" --name "KAHE-Attendance-$APP_VERSION-APK" --dir apk-output
+          cd apk-output
+          test -s "KAHE-Attendance-$APP_VERSION.apk"
+          sha256sum --check SHA256SUMS.txt
+      - name: Upload APK and publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "android-v$APP_VERSION" "apk-output/KAHE-Attendance-$APP_VERSION.apk" apk-output/SHA256SUMS.txt
+          gh release edit "android-v$APP_VERSION" --draft=false --latest
